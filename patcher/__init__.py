@@ -6,7 +6,7 @@ from numpy.lib.stride_tricks import as_strided
 import numbers
 
 
-def make_patches(image: np.ndarray, patch_size: Tuple, step=1,
+def make_patches(arr_in: np.ndarray, patch_size: Tuple, step=1,
                  do_pad: bool=False, mode: str='constant', **kwargs) -> np.ndarray:
     
     """
@@ -14,13 +14,13 @@ def make_patches(image: np.ndarray, patch_size: Tuple, step=1,
     
     Args:
         arr_in (np.ndarray): input array
-        win_shape (Tuple): window shape
+        patch_size (Tuple): window shape
         step (int/Tuple, optional): the step size between patches. A single integer, or a tuple that has the same as patch_size. Defaults to 1.
         do_pad (bool, optional): padding option. Defaults to False.
         mode (str, optional): the mode used in numpy.pad(). Defaults to 'constant'.
         kwargs: dict. Any keyword arguments the numpy.pad() requires.
     """
-    return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
+    return view_as_windows(arr_in, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
 
 
 def merge_patches(patches: np.ndarray, out_shape: Tuple=None, step: int=1) -> np.ndarray:
