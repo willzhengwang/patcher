@@ -6,7 +6,8 @@ from numpy.lib.stride_tricks import as_strided
 import numbers
 
 
-def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
+def patch(image: np.ndarray, patch_size: Tuple, step=1,
+          do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
     
     """
     Split an N-dimensional numpy array into small patches.
@@ -22,14 +23,17 @@ def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode
     return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
 
 
-def unpatch(patches: np.ndarray, out_shape: Tuple, step: int) -> np.ndarray:
+def unpatch(patches: np.ndarray, out_shape: Tuple=None, step: int=1) -> np.ndarray:
     """
     Merge small patches into a large array.
 
     Args:
         patches (np.ndarray): _description_
-        out_shape (Tuple): _description_
-        step (int): _description_
+        out_shape (Tuple): target out array shape.
+                            Defaults to None: (n_patches - 1) * step + max(patch_size, step) along each axis
+                            out_shape is larger than the default size: padding zeros to the end
+                            out_shape is less than the default size: cutting downing
+        step (int/Tuple, optional): the step size between patches.
 
     Raises:
         ValueError: _description_
@@ -43,8 +47,10 @@ def unpatch(patches: np.ndarray, out_shape: Tuple, step: int) -> np.ndarray:
     # -- basic checks on arguments
 
     ndim = len(patches.shape) // 2
-    
-    if len(out_shape) != ndim:
+
+    if out_shape is None:
+        out_shape = (None, ) * ndim
+    elif len(out_shape) != ndim:
         raise ValueError("`patches` is incompatible with `out_shape`")
     
     if isinstance(step, numbers.Number):
@@ -57,13 +63,25 @@ def unpatch(patches: np.ndarray, out_shape: Tuple, step: int) -> np.ndarray:
     
     while np.any(np.array(list(patches.shape)[:ndim]) != 1):
         for axis in range(ndim):
-            patches = unpatch_along_axis(patches, axis, step[axis], out_shape[axis])
+            patches = unpatch_along_axis(patches, axis, step[axis])
     
     assert np.all(np.array(patches.shape)[:ndim] == 1)
-    for i in np.arange(ndim):
+    for _ in np.arange(ndim):
         patches = np.squeeze(patches, axis=0)
-    assert patches.shape == out_shape
-    
+
+    # deal with None out_shape
+    if np.any(np.array(out_shape) != None):
+        # `patches` is the merged array
+        for axis in range(ndim):
+            if out_shape[axis] > patches.shape[axis]:
+                patches = patches[dynamic_slicing(patches, axis, 0, out_shape[axis])]
+                # add zeros to the end
+                add_shape = list(patches.shape)
+                add_shape[axis] = out_shape[axis] - patches.shape[axis]
+                patches = np.concatenate((patches, np.zeros(tuple(add_shape), dtype=patches.dtype)), axis=axis)
+            elif out_shape[axis] < patches.shape[axis]:
+                patches = patches[dynamic_slicing(patches, axis + ndim, 0,  out_shape[axis])]
+
     return patches
 
 
@@ -167,7 +185,6 @@ def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
         _type_: _description_
     """
 
-    
     if start is None or end is None:
         # get all indices along this axis
         start = 0
@@ -175,20 +192,19 @@ def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
     return (slice(None),) * (axis % arr.ndim) + (slice(start, end, 1),)
 
 
-def unpatch_along_axis(patches: np.ndarray, axis: int, step: int, out_size: int=None) -> np.ndarray:
+def unpatch_along_axis(patches: np.ndarray, axis: int, step: int) -> np.ndarray:
     """
     Unpatch/merge small patches along a specific axis.
     
     Assuming the final mosaic shape: [H, W, D]; the single patch shape: [p_h, p_w, p_d]; and the patch indices shape [s_h, s_w, s_d]. 
     This function will achieve the following:
-    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; operate on the the axis=0; --> output patches [1, s_w, s_d, H, p_w, p_d]
-    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; operate on the the axis=1; --> output patches [s_h, 1, s_d, p_h, W, p_d]
+    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; along the axis=0; --> output patches [1, s_w, s_d, H, p_w, p_d]
+    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; along the axis=1; --> output patches [s_h, 1, s_d, p_h, W, p_d]
 
     Args:
         patches (np.ndarray): _description_
         axis (int): _description_
         step (int): _description_
-        out_size (int, optional): the size in this axis. Defaults to None.
 
     Returns:
         np.ndarray: patches merged along the specific axis
@@ -249,9 +265,7 @@ def unpatch_along_axis(patches: np.ndarray, axis: int, step: int, out_size: int=
             uni_inds = dynamic_slicing(mosaic, axis + ndim, uni_section[0], uni_section[1])
             strip_patches = patches[dynamic_slicing(patches, axis, j, j+1)]
             mosaic[uni_inds] = strip_patches[dynamic_slicing(strip_patches, axis+ndim, 0, win_size)]
-    
-    if out_size is not None:
-        mosaic = mosaic[dynamic_slicing(mosaic, axis + ndim, 0, out_size)]
+
     return mosaic
 
 
