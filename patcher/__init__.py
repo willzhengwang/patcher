@@ -6,8 +6,8 @@ from numpy.lib.stride_tricks import as_strided
 import numbers
 
 
-def patch(image: np.ndarray, patch_size: Tuple, step=1,
-          do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
+def make_patches(image: np.ndarray, patch_size: Tuple, step=1,
+                 do_pad: bool=False, mode: str='constant', **kwargs) -> np.ndarray:
     
     """
     Split an N-dimensional numpy array into small patches.
@@ -23,7 +23,7 @@ def patch(image: np.ndarray, patch_size: Tuple, step=1,
     return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
 
 
-def unpatch(patches: np.ndarray, out_shape: Tuple=None, step: int=1) -> np.ndarray:
+def merge_patches(patches: np.ndarray, out_shape: Tuple=None, step: int=1) -> np.ndarray:
     """
     Merge small patches into a large array.
 
@@ -63,7 +63,7 @@ def unpatch(patches: np.ndarray, out_shape: Tuple=None, step: int=1) -> np.ndarr
     
     while np.any(np.array(list(patches.shape)[:ndim]) != 1):
         for axis in range(ndim):
-            patches = unpatch_along_axis(patches, axis, step[axis])
+            patches = merge_along_axis(patches, axis, step[axis])
     
     assert np.all(np.array(patches.shape)[:ndim] == 1)
     for _ in np.arange(ndim):
@@ -192,7 +192,7 @@ def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
     return (slice(None),) * (axis % arr.ndim) + (slice(start, end, 1),)
 
 
-def unpatch_along_axis(patches: np.ndarray, axis: int, step: int) -> np.ndarray:
+def merge_along_axis(patches: np.ndarray, axis: int, step: int) -> np.ndarray:
     """
     Unpatch/merge small patches along a specific axis.
     
