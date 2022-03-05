@@ -91,3 +91,62 @@ def view_as_windows(arr_in: np.ndarray, win_shape: Tuple, step=1, do_pad=False, 
     arr_out = as_strided(arr_in, shape=new_shape, strides=strides)
     return arr_out
 
+
+def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
+    
+    """
+    Split an N-dimensional numpy array into small patches.
+    
+    Args:
+        arr_in (np.ndarray): input array
+        win_shape (Tuple): window shape
+        step (int/Tuple, optional): the step size between patches. A single integer, or a tuple that has the same as patch_size. Defaults to 1.
+        do_pad (bool, optional): padding option. Defaults to False.
+        mode (str, optional): the mode used in numpy.pad(). Defaults to 'constant'.
+        **kwargs: dict. Any keyword arguments the numpy.pad() requires.
+    """
+    
+    
+    aa = 0
+    # """
+    # Split an N-dimensional numpy array into small patches given the patch size.
+
+    # Parameters
+    # ----------
+    # array: an array to be split. It can be 2d (m, n) or 3d (m, n, d), 4d (c, m, n, d), ...
+    # patch_size: the size of a single patch
+    # step: the step size between patches. a single integer, or a tuple that has the same as patch_size
+    # do_pad: pad the image and keep the remainders
+    # mode: the mode used in numpy.pad
+    # kwargs: dict. Any keyword arguments the numpy.pad requires.
+
+    # Examples
+    # --------
+    # >>> image = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    # >>> patches = patchify(image, (2, 2), step=1)  # split image into 2*3 small 2*2 patches.
+    # >>> assert patches.shape == (2, 3, 2, 2)
+    # >>> reconstructed_image = unpatchify(patches, image.shape)
+    # >>> assert (reconstructed_image == image).all()
+    # """
+    return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
+
+def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
+    """
+    Slice an array from the start to the end along a dynamic axis
+
+    Args:
+        arr (np.ndarray): _description_
+        axis (int): _description_
+        start (int, optional): _description_. Defaults to None.
+        end (int, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+
+    
+    if start is None or end is None:
+        # get all indices along this axis
+        start = 0
+        end = arr.shape[axis]
+    return (slice(None),) * (axis % arr.ndim) + (slice(start, end, 1),)
