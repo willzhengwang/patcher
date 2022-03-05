@@ -22,6 +22,51 @@ def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode
     return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
 
 
+def unpatch(patches: np.ndarray, out_shape: Tuple, step: int) -> np.ndarray:
+    """
+    Merge small patches into a large array.
+
+    Args:
+        patches (np.ndarray): _description_
+        out_shape (Tuple): _description_
+        step (int): _description_
+
+    Raises:
+        ValueError: _description_
+        ValueError: _description_
+        ValueError: _description_
+
+    Returns:
+        np.ndarray: _description_
+    """
+    
+    # -- basic checks on arguments
+
+    ndim = len(patches.shape) // 2
+    
+    if len(out_shape) != ndim:
+        raise ValueError("`patches` is incompatible with `out_shape`")
+    
+    if isinstance(step, numbers.Number):
+        if step < 1:
+            raise ValueError("`step` must be >= 1")
+        step = (step,) * ndim
+        
+    if len(step) != ndim:
+        raise ValueError("`step` is incompatible with `out_shape`")
+    
+    while np.any(np.array(list(patches.shape)[:ndim]) != 1):
+        for axis in range(ndim):
+            patches = unpatch_along_axis(patches, axis, step[axis], out_shape[axis])
+    
+    assert np.all(np.array(patches.shape)[:ndim] == 1)
+    for i in np.arange(ndim):
+        patches = np.squeeze(patches, axis=0)
+    assert patches.shape == out_shape
+    
+    return patches
+
+
 def view_as_windows(arr_in: np.ndarray, win_shape: Tuple, step=1, do_pad=False, mode='constant', **kwargs):
     """
     # The code is developed on top of https://github.com/scikit-image/scikit-image/blob/main/skimage/util/shape.py
@@ -130,7 +175,7 @@ def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
     return (slice(None),) * (axis % arr.ndim) + (slice(start, end, 1),)
 
 
-def unpatchify_along_axis(patches: np.ndarray, axis: int, step: int, out_size: int=None) -> np.ndarray:
+def unpatch_along_axis(patches: np.ndarray, axis: int, step: int, out_size: int=None) -> np.ndarray:
     """
     Unpatch/merge small patches along a specific axis.
     
@@ -208,4 +253,5 @@ def unpatchify_along_axis(patches: np.ndarray, axis: int, step: int, out_size: i
     if out_size is not None:
         mosaic = mosaic[dynamic_slicing(mosaic, axis + ndim, 0, out_size)]
     return mosaic
+
 
