@@ -6,6 +6,22 @@ from numpy.lib.stride_tricks import as_strided
 import numbers
 
 
+def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
+    
+    """
+    Split an N-dimensional numpy array into small patches.
+    
+    Args:
+        arr_in (np.ndarray): input array
+        win_shape (Tuple): window shape
+        step (int/Tuple, optional): the step size between patches. A single integer, or a tuple that has the same as patch_size. Defaults to 1.
+        do_pad (bool, optional): padding option. Defaults to False.
+        mode (str, optional): the mode used in numpy.pad(). Defaults to 'constant'.
+        kwargs: dict. Any keyword arguments the numpy.pad() requires.
+    """
+    return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
+
+
 def view_as_windows(arr_in: np.ndarray, win_shape: Tuple, step=1, do_pad=False, mode='constant', **kwargs):
     """
     # The code is developed on top of https://github.com/scikit-image/scikit-image/blob/main/skimage/util/shape.py
@@ -33,7 +49,7 @@ def view_as_windows(arr_in: np.ndarray, win_shape: Tuple, step=1, do_pad=False, 
         step (int/Tuple, optional): the step size between patches. A single integer, or a tuple that has the same as patch_size. Defaults to 1.
         do_pad (bool, optional): padding option. Defaults to False.
         mode (str, optional): the mode used in numpy.pad(). Defaults to 'constant'.
-        **kwargs: dict. Any keyword arguments the numpy.pad() requires.
+        kwargs: dict. Any keyword arguments the numpy.pad() requires.
 
     Returns:
         _type_: _description_
@@ -92,44 +108,6 @@ def view_as_windows(arr_in: np.ndarray, win_shape: Tuple, step=1, do_pad=False, 
     return arr_out
 
 
-def patch(image: np.ndarray, patch_size: Tuple, step=1, do_pad: bool=False, mode: str='constant', **kwargs ) -> np.ndarray:
-    
-    """
-    Split an N-dimensional numpy array into small patches.
-    
-    Args:
-        arr_in (np.ndarray): input array
-        win_shape (Tuple): window shape
-        step (int/Tuple, optional): the step size between patches. A single integer, or a tuple that has the same as patch_size. Defaults to 1.
-        do_pad (bool, optional): padding option. Defaults to False.
-        mode (str, optional): the mode used in numpy.pad(). Defaults to 'constant'.
-        **kwargs: dict. Any keyword arguments the numpy.pad() requires.
-    """
-    
-    
-    aa = 0
-    # """
-    # Split an N-dimensional numpy array into small patches given the patch size.
-
-    # Parameters
-    # ----------
-    # array: an array to be split. It can be 2d (m, n) or 3d (m, n, d), 4d (c, m, n, d), ...
-    # patch_size: the size of a single patch
-    # step: the step size between patches. a single integer, or a tuple that has the same as patch_size
-    # do_pad: pad the image and keep the remainders
-    # mode: the mode used in numpy.pad
-    # kwargs: dict. Any keyword arguments the numpy.pad requires.
-
-    # Examples
-    # --------
-    # >>> image = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
-    # >>> patches = patchify(image, (2, 2), step=1)  # split image into 2*3 small 2*2 patches.
-    # >>> assert patches.shape == (2, 3, 2, 2)
-    # >>> reconstructed_image = unpatchify(patches, image.shape)
-    # >>> assert (reconstructed_image == image).all()
-    # """
-    return view_as_windows(image, patch_size, step, do_pad=do_pad, mode=mode, **kwargs)
-
 def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
     """
     Slice an array from the start to the end along a dynamic axis
@@ -150,3 +128,84 @@ def dynamic_slicing(arr: np.ndarray, axis: int, start: int=None, end: int=None):
         start = 0
         end = arr.shape[axis]
     return (slice(None),) * (axis % arr.ndim) + (slice(start, end, 1),)
+
+
+def unpatchify_along_axis(patches: np.ndarray, axis: int, step: int, out_size: int=None) -> np.ndarray:
+    """
+    Unpatch/merge small patches along a specific axis.
+    
+    Assuming the final mosaic shape: [H, W, D]; the single patch shape: [p_h, p_w, p_d]; and the patch indices shape [s_h, s_w, s_d]. 
+    This function will achieve the following:
+    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; operate on the the axis=0; --> output patches [1, s_w, s_d, H, p_w, p_d]
+    input patches: [s_h, s_w, s_d, p_h, p_w, p_d]; operate on the the axis=1; --> output patches [s_h, 1, s_d, p_h, W, p_d]
+
+    Args:
+        patches (np.ndarray): _description_
+        axis (int): _description_
+        step (int): _description_
+        out_size (int, optional): the size in this axis. Defaults to None.
+
+    Returns:
+        np.ndarray: patches merged along the specific axis
+    """
+    
+    assert isinstance(step, numbers.Number),  "`step` must be a single number"
+    assert len(patches.shape) % 2 == 0, "the shape of `patches` is incorrect"
+    ndim = len(patches.shape) // 2
+    
+    win_indices_shape = tuple(list(patches.shape)[:ndim])
+    win_shape = tuple(list(patches.shape)[-ndim:])
+    
+    # along this axis
+    n_patches = win_indices_shape[axis]
+    
+    if n_patches == 1: 
+        return patches
+    
+    win_size = win_shape[axis]
+    ovl_size = win_shape[axis] - step
+    mosaic_size = (n_patches - 1) * step + max(win_size, step)
+    
+    # mosaic results along this axis
+    mosaic_shape = list(patches.shape)
+    mosaic_shape[axis],  mosaic_shape[axis + ndim] = 1, mosaic_size
+    mosaic = np.zeros(tuple(mosaic_shape), dtype=patches.dtype)
+    
+    for j in range(n_patches): 
+        
+        if ovl_size > 0:
+            # for the unique section
+            uni_section = (j * step + ovl_size, (j + 1) * step)
+            uni_inds = dynamic_slicing(mosaic, axis + ndim, uni_section[0], uni_section[1])
+            strip_patches = patches[dynamic_slicing(patches, axis, j, j+1)]
+            mosaic[uni_inds] = strip_patches[dynamic_slicing(strip_patches, axis+ndim, ovl_size, step)]
+
+            # for the overlaps
+            if j == 0:
+                # the first item
+                ovl_section = (0, ovl_size)
+                ovl_inds = dynamic_slicing(mosaic, axis + ndim, ovl_section[0], ovl_section[1])
+                mosaic[ovl_inds] = strip_patches[dynamic_slicing(strip_patches, axis+ndim, 0, ovl_size)]     
+            else:  
+                # intermediate items
+                ovl_section = (j * step, j * step + ovl_size)
+                ovl_inds = dynamic_slicing(mosaic, axis + ndim, ovl_section[0], ovl_section[1])
+                strip_patches_pre = patches[dynamic_slicing(patches, axis, j - 1, j)]
+                mosaic[ovl_inds] = np.mean(np.array([strip_patches[dynamic_slicing(strip_patches, axis+ndim, 0, ovl_size)], 
+                                                     strip_patches_pre[dynamic_slicing(strip_patches_pre, axis+ndim, win_size-ovl_size, win_size)]]), axis=0) 
+            if j == n_patches - 1: 
+                # the last item
+                ovl_section = (mosaic_size - ovl_size, mosaic_size)
+                ovl_inds = dynamic_slicing(mosaic, axis + ndim, ovl_section[0], ovl_section[1])
+                mosaic[ovl_inds] = strip_patches[dynamic_slicing(strip_patches, axis+ndim, win_size-ovl_size, win_size)]
+        else:
+            # for the unique section
+            uni_section = (j * step , j * step + win_size)
+            uni_inds = dynamic_slicing(mosaic, axis + ndim, uni_section[0], uni_section[1])
+            strip_patches = patches[dynamic_slicing(patches, axis, j, j+1)]
+            mosaic[uni_inds] = strip_patches[dynamic_slicing(strip_patches, axis+ndim, 0, win_size)]
+    
+    if out_size is not None:
+        mosaic = mosaic[dynamic_slicing(mosaic, axis + ndim, 0, out_size)]
+    return mosaic
+
