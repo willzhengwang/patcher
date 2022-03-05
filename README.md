@@ -8,15 +8,15 @@ Please see an image operation demo below.
 
 # Features
 ## Optional padding
-is supported in the patching function. 
+Padding is supported in making patches. 
 ## Overlap manipulation
- Operation functions (currently `mean` is used, `max` and `min` will be added) can be applied to the overlaps between neighbouring patches, which can be useful for semantic segmentation. 
+Operation functions (currently `mean` is used, `max` and `min` will be added) can be applied to the overlaps between neighbouring patches, which can be useful for semantic segmentation. 
 
 # Installation
 
 You can simply include the patcher folder into your project.
 
-In the future, I will setup it on `pypo` so that you can: Install `patcher` using `pip`:
+In the future, I will setup it on `pypi` so that you can: Install `patcher` using `pip`:
 
 ``` {.sourceCode .bash}
 $ pip install patcher
